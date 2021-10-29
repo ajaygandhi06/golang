@@ -12,10 +12,16 @@ import (
 	"time"
 
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-lambda-go/lambdacontext"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go/aws"
 )
+
+type messageData struct {
+	ContextData string
+	EventData   string
+}
 
 //#endregion
 
@@ -60,14 +66,14 @@ func executeInLocalEnvironment(handlerFunc interface{}, region string, lambdaNam
 	}
 	client := sqs.NewFromConfig(cfg)
 	queueUrl := ""
-	var messageData string
+	var receivedByteData string
 	for {
 		if queueUrl == "" {
 			queueUrl = getQueueUrl(*client, lambdaName)
 		}
 		if queueUrl != "" {
-			messageData = readMessage(*client, queueUrl)
-			if messageData != "" {
+			receivedByteData = readMessage(*client, queueUrl)
+			if receivedByteData != "" {
 				break
 			}
 		}
@@ -76,14 +82,21 @@ func executeInLocalEnvironment(handlerFunc interface{}, region string, lambdaNam
 
 	handler := reflect.ValueOf(handlerFunc)
 	handlerType := reflect.TypeOf(handlerFunc)
+	contextDataType := handlerType.In(0)
 	eventDataType := handlerType.In(1)
+	contextData := reflect.New(contextDataType)
 	eventData := reflect.New(eventDataType)
-	err = json.Unmarshal([]byte(messageData), eventData.Interface())
+	dataReceived := messageData{}
+	err = json.Unmarshal([]byte(receivedByteData), &dataReceived)
 	if err != nil {
 		fmt.Println("Error occured while unmarshling event data")
 	}
+
+	json.Unmarshal([]byte(dataReceived.ContextData), contextData.Interface())
+	json.Unmarshal([]byte(dataReceived.EventData), eventData.Interface())
+
 	var args []reflect.Value
-	args = append(args, reflect.ValueOf(context.TODO()))
+	args = append(args, contextData.Elem())
 	args = append(args, eventData.Elem())
 	handler.Call(args)
 }
@@ -121,10 +134,16 @@ func readMessage(client sqs.Client, queueUrl string) string {
 //#region AWS Environment Execution
 func handleRequest(ctx context.Context, event interface{}) (string, error) {
 	queueUrl := createQueueIfNotExist()
+
 	if queueUrl != "" {
 		client := sqs.New(sqs.Options{Region: hotsedInRegion})
-		jsonData, _ := json.Marshal(event)
-		messageSent := sendMessage(*client, queueUrl, string(jsonData))
+		lc, _ := lambdacontext.FromContext(ctx)
+		contextData, _ := json.Marshal(lc)
+		eventData, _ := json.Marshal(event)
+		messageData := messageData{ContextData: string(contextData),
+			EventData: string(eventData)}
+		dataToSend, _ := json.Marshal(messageData)
+		messageSent := sendMessage(*client, queueUrl, string(dataToSend))
 		if messageSent {
 			return "Execution Succesful", nil
 		} else {
