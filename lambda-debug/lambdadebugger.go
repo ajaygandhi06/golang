@@ -148,12 +148,12 @@ func handleRequest(ctx context.Context, event interface{}) (string, error) {
 		dataToSend, _ := json.Marshal(messageData)
 		messageSent := sendMessage(*client, queueUrl, string(dataToSend))
 		if messageSent {
-			return "Execution Succesful", nil
+			return "Remote lambda execution successful", nil
 		} else {
-			return "Execution failed", errors.New("error in sending message to queue")
+			return "Remote lambda execution failed", errors.New("error in sending message to queue")
 		}
 	} else {
-		return "Execution failed", errors.New("error in creating queue")
+		return "Remote lambda execution failed", errors.New("error in creating queue")
 	}
 }
 
