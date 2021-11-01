@@ -26,18 +26,13 @@ type messageData struct {
 //#endregion
 
 var (
-	functionName                string
-	isExecutingInAWSEnvironment bool
-	hotsedInRegion              string
+	functionName   string
+	hotsedInRegion string
 )
 
 func init() {
 	functionName = os.Getenv("AWS_LAMBDA_FUNCTION_NAME")
 	hotsedInRegion = os.Getenv("AWS_REGION")
-
-	if hotsedInRegion != "" { // If environment variable is set, that means function is executing in AWS environment
-		isExecutingInAWSEnvironment = true
-	}
 
 }
 
@@ -50,7 +45,8 @@ func init() {
 // region: region name where lambda is hosted
 // lambdaName: name of lambda function provided by you in AWS environment
 func Start(handlerFunc interface{}, region string, lambdaName string) {
-	if isExecutingInAWSEnvironment {
+	debug := os.Getenv("debug")
+	if debug == "true" {
 		lambda.Start(handleRequest)
 	} else {
 		executeInLocalEnvironment(handlerFunc, region, lambdaName)
@@ -66,14 +62,14 @@ func executeInLocalEnvironment(handlerFunc interface{}, region string, lambdaNam
 	}
 	client := sqs.NewFromConfig(cfg)
 	queueUrl := ""
-	var receivedByteData string
+	var receivedData string
 	for {
 		if queueUrl == "" {
 			queueUrl = getQueueUrl(*client, lambdaName)
 		}
 		if queueUrl != "" {
-			receivedByteData = readMessage(*client, queueUrl)
-			if receivedByteData != "" {
+			receivedData = readMessage(*client, queueUrl)
+			if receivedData != "" {
 				break
 			}
 		}
@@ -86,14 +82,14 @@ func executeInLocalEnvironment(handlerFunc interface{}, region string, lambdaNam
 	eventDataType := handlerType.In(1)
 	contextData := reflect.New(contextDataType)
 	eventData := reflect.New(eventDataType)
-	dataReceived := messageData{}
-	err = json.Unmarshal([]byte(receivedByteData), &dataReceived)
+	messageRecieved := messageData{}
+	err = json.Unmarshal([]byte(receivedData), &messageRecieved)
 	if err != nil {
 		fmt.Println("Error occured while unmarshling event data")
 	}
 
-	json.Unmarshal([]byte(dataReceived.ContextData), contextData.Interface())
-	json.Unmarshal([]byte(dataReceived.EventData), eventData.Interface())
+	json.Unmarshal([]byte(messageRecieved.ContextData), contextData.Interface())
+	json.Unmarshal([]byte(messageRecieved.EventData), eventData.Interface())
 
 	var args []reflect.Value
 	args = append(args, contextData.Elem())
