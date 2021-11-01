@@ -26,14 +26,17 @@ type messageData struct {
 //#endregion
 
 var (
-	functionName   string
-	hotsedInRegion string
+	functionName                string
+	hotsedInRegion              string
+	isExecutingInAwsEnvironment bool
 )
 
 func init() {
 	functionName = os.Getenv("AWS_LAMBDA_FUNCTION_NAME")
 	hotsedInRegion = os.Getenv("AWS_REGION")
-
+	if hotsedInRegion != "" {
+		isExecutingInAwsEnvironment = true
+	}
 }
 
 // Starts the lambda function in local debug mode
@@ -45,9 +48,13 @@ func init() {
 // region: region name where lambda is hosted
 // lambdaName: name of lambda function provided by you in AWS environment
 func Start(handlerFunc interface{}, region string, lambdaName string) {
-	debug := os.Getenv("debug")
-	if debug == "true" {
-		lambda.Start(handleRequest)
+	if isExecutingInAwsEnvironment {
+		debug := os.Getenv("debug")
+		if debug == "true" {
+			lambda.Start(handleRequest)
+		} else {
+			lambda.Start(handlerFunc)
+		}
 	} else {
 		executeInLocalEnvironment(handlerFunc, region, lambdaName)
 	}
